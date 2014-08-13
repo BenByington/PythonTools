@@ -11,6 +11,32 @@ except:
 	print "no matplotlib available on this machine.  Prepare to fail gracelessly if used!"
 
 class IMHD:
+	"""
+    This class is designed to represent an IMHD simulation.  It provides 
+    services on multiple levels:
+
+    1.  Organizational:  Having separate objects for different simulations 
+        makes it easy to compare results from different simulations without
+        either trying to remember a host of local variables or constantly
+        overwriting old data and hoping you don't need it again.  Remember
+        python is mutable, and if you calculate something you can assign it 
+        to an IMHD object for storage, even if the routines here know nothing
+        about it!
+
+    2.  Automatic data management:  For most situations, all you have to do
+        is tell IMHD where the simulation data lies.  It will automatically
+        parse various configuration files and logs to determine the resolution
+        and domain size, and you generally just have to say which bulk or 
+        scalar data you want and it will load it automatically.
+
+    3.  Basic calculations: There are routines here that know how to take
+        derivatives of the data, do spectral decompositions, make basic 
+        pictures and movies.  
+
+    See comments on the __init__ and other functions for tips on creation
+    and usage of IMHD objects.	
+         
+	"""
 	_ratt = ["directory","nx","ny","nz", "xmx", "ymx", "zmx","scalar_f",
 	      "magnetic","temperature"]
 
@@ -20,6 +46,16 @@ class IMHD:
 		  xmx = None, ymx=None, zmx = None,\
 				  scalar_f = None, dtype=np.float64, \
 				  magnetic = None, temperature = None):
+    """This is the main constructor you will call when creating objects. No
+       arguments are mandatory, though most commonly you will create an object
+       via: var = IMHD('string-with-relative-path-of-simulation').  The path
+       you give should be the path to base directory for a given simulation,
+       which contains all the logs and data directories.  It will default to 
+       assuming the current directory is what you want.  All the other arguments
+       will be automatically parsed from the logs and configuration files, and
+       should only be provided here if those logs and config files are missing, 
+       corrupted, or you just for some reason know better.
+    """
 
 		self.dtype = dtype
 		failed = ValueError("Could not create IMHD object")
@@ -69,6 +105,11 @@ class IMHD:
 
 
 	def parse_start(self, file):
+    """Internal routine for parsting the configuration file.  You should never
+       neet to call it manaully.  This routine will fill in any simulation 
+       parameters (such as number of grid points) that are not explicitly
+       set already by the __init__ routine.s
+    """
 		try:
 			file = open(file)
 			while 1:
@@ -106,6 +147,10 @@ class IMHD:
 			print "Warning, could not parse: File " + file + " does not exist in " + pwd()
 
 	def load_scalars(self, nstart=None,nstop=None,nstep=None, \
+    """Another internal routine to handle the loading and amalgamation of
+       scalar data.  You can call this yourself, but more likely you will want
+       the "scalars" function below.
+    """
 					 nrec=None,list=None):
 		if self.magnetic:
 			nscalars = 24
@@ -121,10 +166,46 @@ class IMHD:
 		cd(curr)
 	
 	def clear_scalars(self):
+    """Routine that can be used to clear the scalar data from memory manually
+       if it is no longer needed.  Only really useful if you have an obscenely
+       long time series and your system is low on memory.
+    """
 		if hasattr(self,'scalar_data'):
 			del self.scalar_data
 	
 	def scalars(self,var=None):
+    """This routine gives you access to the scalar data.  If this data is 
+       not already loaded into this IMHD object it will automatically do that
+       for you.  If you do not provide any arguments then it will return the
+       full set of scalar values in the form of an array where the first 
+       index is time and the second index goes through the different scalar
+       variables.  Those variables are: 
+       
+       0 = n_step
+       1 = total_time
+       2 = u_min
+       3 = u_max,
+       4 = u_avg
+       5 = v_min
+       6 = v_max
+       7 = v_avg
+       8 = w_min
+       9 = w_max
+      10 = w_avg
+      11 = kinetic_energy
+      12 = max_kinetic_energy
+      13 = bx_min
+      14 = bx_max
+      15 = b_avg(1)
+      16 = by_min
+      17 = by_max
+      18 = b_avg(2)
+      19 = bz_min
+      20 = bz_max
+      21 = b_avg(3)
+      22 = Magnetic_Energy
+      23 = Max_MagneticPressure
+    """
 		if hasattr(self,'scalar_data') == False:
 			self.load_scalars()
 		if var == None:
@@ -132,7 +213,19 @@ class IMHD:
 		else:
 			return self.scalar_data[:,var]
 
+    
 	def get_b(self, itr):
+    """Loads a specified 3D magnetic field.  itr is the iteration number of 
+       the output desired.  No need to zero pad the number to make it match the
+       actual directory name.  If you have an imhd_object called sim and you 
+       want to store the output from iteration 1000 in the variables bx by bz
+       and b2, then the correct call is:
+
+       bx,by,bz,b2 = sim.get_b(1000)
+
+       I forget if the indices are ordered x,y,z or z,y,x, but if you type 
+       something like bx.shape it should become apparent.
+    """
 		if self.magnetic == False:
 			print "ERROR: This simulation has no magnetic fields!!"
 		try:
@@ -151,6 +244,10 @@ class IMHD:
 			print "Spatial record " + str(itr) + " does not exist"
 			
 	def get_time(self, itr):
+    """Hand in the iteration number and it will find the corresponding
+       simualtion time.  Useful as a helper function when doing calculations
+       and you want to plot data agains time.
+    """
 		try:
 			if "start" in str(itr).lower():
 				curr = cd(self.directory + "/Start/",save=True)
@@ -168,6 +265,9 @@ class IMHD:
 			cd(curr)
 			
 	def get_v(self, itr):
+    """Same as get_b save we are now getting the velocity and optional
+       temperature field.  
+    """
 		try:
 			if "start" in str(itr).lower():
 				curr = cd(self.directory + "/Start/",save=True)
@@ -185,6 +285,12 @@ class IMHD:
 			cd(curr)
 			
 	def get_file(self, itr, name, shape=None):
+    """Loads an arbitrary file from the spatial folder.  Can be used to load
+       individual files (e.g. just Bx without By or Bz) or just any arbitrary
+       file if you save 3D calculated data with the regular spatial outputs.  
+       If a shape is not specified, it assumes the same shape as the rest of
+       the 3D spatial snapshots from the code.
+    """
 		try:
 			if "start" in str(itr).lower():
 				curr = cd(self.directory + "/Start/",save=True)
@@ -210,6 +316,8 @@ class IMHD:
 			
 
 	def write_file(self, itr, name, data):
+    """Just the inverse of the above get_file routine.
+    """
 		try:
 			if "start" in str(itr).lower():
 				curr = cd(self.directory + "/Start/",save=True)
@@ -226,8 +334,10 @@ class IMHD:
 			cd(curr)
 			raise
 			
-
 	def bulk_itr(self,vars=[],starti=None,endi=None,bstep=None):
+    """Internal routine used to selectively load specific bulk files.  You
+       shouldn't need to call this by hand
+    """
 		validV = {'u' : 'u', 'v' : 'v', 'w' : 'w'}
 		if self.magnetic == True:
 			validV.update({'bx' : 'Bx', 'by' : 'By', 'bz' : 'Bz', 'b2' : 'B2'})
@@ -286,6 +396,22 @@ class IMHD:
 
 	def make_gif(self, draw, starti=None, endi=None, bstep=None, dir=None, 
 				 size=(8,6), suffix=None):
+    """Used to make gifs, where each frame corresponds to a given output in the
+       spatial data.
+
+       Arguments:
+         draw:  An object that knows how to draw each frame when given a frame
+                of data.  Either see below for the routines this object must
+                have implimented, or just grab examples from calc_series.py and
+                work from them.
+         stari: First index for the animation.  Defaults to first data snapshot
+         endi : Last index for the animation.  Defaults to last data snapshot
+         bste : step between frames.  Defaults to the number of steps between
+                data dumps in the simulation
+         dir  : Working directory to contain each frames and the eventual movie.                Defaults to the base of the simulation.
+         size : Size (in I forget what units) for each frame being made
+         suffix : Optional name that will post-pend the name of the movie.
+    """
 		if dir == None:
 			dir = self.directory
 
@@ -344,6 +470,9 @@ class IMHD:
 		cd(curr)
 
 	def show_frame(self, draw, iteration, size=(8,6)):
+    """Essentially the same as the above routine, save that we just put a
+       single frame on the screen, rather than an animation saved to disk.
+    """
 
                 args = draw.get_params()
                 args.append('iteration')
@@ -374,6 +503,13 @@ class IMHD:
 
 
 	def bulk_calc(self, calc, starti=None, endi=None, bstep=None):
+    """Similar to make_gif, but instead of applying an animation function to 
+       each data snapshot to make a movie, we apply a calculation object to 
+       each snapshot to create an array of results.  The routine is flexible,
+       but has been designed that each snapshot is reduced to a scalar or short
+       vector of results (e.g. average emf or some such).  Again see 
+       calc_series.py for concrete examples.
+    """
 
 		args = calc.get_params()
 		ret = []
@@ -405,11 +541,19 @@ class IMHD:
 			print '-'*60
 
 	def dealias(self,data):
+    """Dealiased a 3D vector, which is assumed to have the same dimensions as
+       a spatial snapshot.  Useful if you have multiplied to of these spatial
+       fields together and you want to keep your math consistent to what 
+       is done in the IMHD code.
+    """
 		data[self.kzmin:self.kzmax,:,:] = 0
 		data[:,self.kymin:self.kymax,:] = 0
 		data[:,:,self.kxmin:self.kxmax] = 0
 
 	def assertDkx(self,data):
+    """Internal routine making sure the spectral derivative multiplicands are
+       there when they are needed
+    """
 		if (self.dkx == None):
 			self.dkx = np.ones_like(data)
 			for x in range(0,self.kxmin+2,1):
@@ -431,11 +575,16 @@ class IMHD:
 				self.dkz[z,:,:] = 1j * 2 * np.pi * z / self.zmx
 
 	def makeSpect(self, a):
+    """Converts an array in spatial coordinates to one in spectral coordinates.
+    """
 		ret = np.fft.rfftn(a)
 		self.dealias(ret)
 		return ret
 
 	def mulSpect(self, a, b):
+    """Properly multiplies two spectral fields in spectral coordinats.  Return
+       will also be spectral.
+    """
 		if (np.isrealobj(a)):
 			return a*b
 		a = np.fft.irfftn(a)
@@ -444,7 +593,11 @@ class IMHD:
 		return self.makeSpect(ret)
 
 	def ddx(self, data):
-
+    """Full derivative routine that is compatible with what is done in the IMHD
+       code.  Note that this involves a fourrier transform, and so is not the
+       fastest operation possible.  Variants exist for the y and z derivative
+       as well.
+    """
 		transform = False
 		if (np.isrealobj(data)):
 			data = self.makeSpect(data)
@@ -492,7 +645,9 @@ class IMHD:
  		return ret
 
 	def inv_ddx(self, data):
-
+    """Inverse derivatives, again doing full spectral calculations.  The
+       resulting field will have no mean in the x direction
+    """
 		transform = False
 		if (np.isrealobj(data)):
 			data = self.makeSpect(data)
@@ -544,6 +699,10 @@ class IMHD:
  		return ret
 
 	def fast_ddx(self, data,xmx=None):
+    """Fast derivative routines.  This uses finite difference so is much
+       quicker than the spectral variants above, but is good for quick and
+       dirty calculations when the precision is not needed.
+    """
 		nx = data.shape[2]
 		if xmx == None:
 			xmx = self.xmx
@@ -571,7 +730,7 @@ class IMHD:
 		return (np.roll(data,-1,0) - np.roll(data,1,0))/2/dz
 
 	def curl(self, x, y, z):
-
+    """Returns the curl of the a vector"""
 		transform = False
 		if (np.isrealobj(x)):
 			x = self.makeSpect(x)
@@ -591,6 +750,7 @@ class IMHD:
 		return [retx, rety, retz]
 
 	def diffusion(self, x, y, z, xmx=None, ymx=None, zmx=None, coef=1):
+    """Calculates the laplacian operator on a vector field"""
 		if xmx == None:
 			xmx = self.xmx
 		if ymx == None:
@@ -613,6 +773,14 @@ class IMHD:
 		return ceof * [retx, rety, retz]
 	
 	def spec(self,iteration, magnetic=False, cutDim=None, slices=0):
+    """Gives you a power spectrum of an iteration of your data.  magnetic 
+       controls if you do it for the magnetic variables or the velocity
+       variables.  If neither cutDim nor slices are specified, then it will
+       give you the power spectrum for the full box averaged over spheres. 
+       Otherwise, cutDim specifies which dimension you want horizontal slices
+       of and slices specifies which slices you want, and for each slice you 
+       will be returned a spectrum for that slice averaged over circles.
+    """
 		if magnetic == True:
 			temp = self.get_b(iteration)
 		else:
@@ -655,6 +823,7 @@ class IMHD:
 
 	#currently only handles full spectral decomposition.  No slices here!
 	def plot_spec(self,iteration,mag=False,loglog=False,cutDim=None, slices=0):
+    """Plot routine to quickly show you a power spectrum as a plot"""
 		if(mag):
 			title = "Magnetic"
 		else:

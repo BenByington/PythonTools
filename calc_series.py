@@ -15,6 +15,13 @@ from physics import *
 
 
 class sim_operation(object):
+"""This file is a cluttered mess, but the principle isn't too tough.  Any time
+   you wish to do a calculation or make a movie over a set of 3D data snapshots
+   from a simulation, you need to use/define one of these objects here.  This
+   is the base class, which has the various methods you'll need to impliment
+   in the child class in order for the imhd object to interact with it as 
+   desired.  
+"""
 	sim = None
 
 	def __init__(self):
@@ -22,12 +29,26 @@ class sim_operation(object):
 		self.suffix = None
 
 	def __call__(self):
+"""EVERY child MUST have a call routine implimented.  The first argument will
+   always be self, after that it is whatever you need (e.g. bx,by and bz).  This
+   routine will either make calls to matplotlib to create a frame when doing an
+   animation, or return a scalar or small vector of data when doing a
+   calculation.
+"""
 		raise NotImplementedError()
 
 	def get_params(self):
+"""This is the most fragile part of this operation.  Here you must define a 
+   routine that returns a string describing the arguments needed to call the
+   __call__ function.  See below for examples on how to do this.
+"""
 		raise NotImplementedError()
 
 	def get_ret_dim(self):
+"""IF defining an object to do caluclations, here you must define how many 
+   elements are in your return vector.  e.g. if you calculate the mean emf in
+   the box, then you would return a 3.
+""" 
 		raise NotImplementedError()
 
 class getIteration(sim_operation): 
